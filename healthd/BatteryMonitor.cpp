@@ -193,6 +193,7 @@ bool BatteryMonitor::update(void) {
     props.batteryHealth = BATTERY_HEALTH_UNKNOWN;
     props.dockBatteryStatus = BATTERY_STATUS_UNKNOWN;
     props.dockBatteryHealth = BATTERY_HEALTH_UNKNOWN;
+    props.maxChargingCurrent = 0;
 
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
         props.batteryPresent = getBooleanField(mHealthdConfig->batteryPresentPath);
@@ -296,14 +297,23 @@ bool BatteryMonitor::update(void) {
                             default:
                                 KLOG_WARNING(LOG_TAG, "%s: Unknown power supply type\n",
                                              name);
-                            }
+                           }
+                           path.clear();
+                           path.appendFormat("%s/%s/current_max", POWER_SUPPLY_SYSFS_PATH,
+                                  name);
+                           if (access(path.string(), R_OK) == 0) {
+                              int maxChargingCurrent = getIntField(path);
+                           if (props.maxChargingCurrent < maxChargingCurrent) {
+                              props.maxChargingCurrent = maxChargingCurrent;
+                           }
                         }
-                    }
+                     }
+                  }
                 }
                 break;
-            } //switch
-        } //while
-        closedir(dir);
+             } //switch
+         } //while
+       closedir(dir);
     }//else
 
     logthis = !healthd_board_battery_update(&props);
@@ -516,9 +526,9 @@ void BatteryMonitor::dumpState(int fd) {
     int v;
     char vs[128];
 
-    snprintf(vs, sizeof(vs), "ac: %d usb: %d wireless: %d dock-ac: %d\n",
+    snprintf(vs, sizeof(vs), "ac: %d usb: %d wireless: %d current_max: %d\n",
              props.chargerAcOnline, props.chargerUsbOnline,
-             props.chargerWirelessOnline, props.chargerDockAcOnline);
+             props.chargerWirelessOnline, props.maxChargingCurrent);
     write(fd, vs, strlen(vs));
     snprintf(vs, sizeof(vs), "status: %d health: %d present: %d\n",
              props.batteryStatus, props.batteryHealth, props.batteryPresent);
