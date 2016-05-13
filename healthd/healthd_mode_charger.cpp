@@ -289,6 +289,25 @@ static int set_backlight(bool on)
     }
     close(fd);
 
+#ifdef SECONDARY_BACKLIGHT_PATH
+    if (access(SECONDARY_BACKLIGHT_PATH, R_OK | W_OK) != 0)
+    {
+        LOGW("Secondary Backlight control not support\n");
+        return 0;
+    }
+
+    fd = open(SECONDARY_BACKLIGHT_PATH, O_RDWR);
+    if (fd < 0) {
+        LOGE("Could not open secondary backlight node : %s\n", strerror(errno));
+        return 0;
+    }
+    LOGV("Enabling secondary backlight\n");
+    if (write(fd, buffer,strlen(buffer)) < 0) {
+        LOGE("Could not write to secondary backlight node : %s\n", strerror(errno));
+    }
+    close(fd);
+#endif
+
     return 0;
 }
 
@@ -714,6 +733,8 @@ static void process_key(struct charger *charger, int code, int64_t now)
                    accordingly. */
                 if (property_get_bool("ro.enable_boot_charger_mode", false)) {
                     LOGW("[%" PRId64 "] booting from charger mode\n", now);
+                    set_backlight(false);
+                    gr_fb_blank(true);
                     property_set("sys.boot_from_charger_mode", "1");
                 } else {
                     LOGW("[%" PRId64 "] rebooting\n", now);

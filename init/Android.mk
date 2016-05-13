@@ -61,14 +61,15 @@ LOCAL_STATIC_LIBRARIES := \
 	libselinux \
 	libmincrypt \
 	libext4_utils_static \
+	libext2_blkid \
 	libext2_uuid_static \
 	liblz4-static \
 	libsparse_static \
-	libz \
-	libext2_blkid \
-	libext2_uuid_static
+	libz
 
 LOCAL_ADDITIONAL_DEPENDENCIES += $(LOCAL_PATH)/Android.mk
+LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include/mtd
+
 ifneq ($(strip $(TARGET_PLATFORM_DEVICE_BASE)),)
 LOCAL_CFLAGS += -D_PLATFORM_BASE="\"$(TARGET_PLATFORM_DEVICE_BASE)\""
 endif
@@ -78,6 +79,8 @@ endif
 ifneq ($(strip $(TARGET_PROP_PATH_FACTORY)),)
 LOCAL_CFLAGS += -DOVERRIDE_PROP_PATH_FACTORY=\"$(TARGET_PROP_PATH_FACTORY)\"
 endif
+
+LOCAL_C_INCLUDES += external/zlib
 
 include $(BUILD_EXECUTABLE)
 

@@ -48,6 +48,12 @@
 #include "log.h"
 
 #include <private/android_filesystem_config.h>
+#include <sys/ioctl.h>
+#include "ubi-user.h"
+
+#if BOOTCHART
+#include "bootchart.h"
+#endif
 
 int add_environment(const char *name, const char *value);
 
@@ -202,23 +208,35 @@ int do_chroot(int nargs, char **args)
 
 int do_class_start(int nargs, char **args)
 {
-        /* Starting a class does not start services
-         * which are explicitly disabled.  They must
-         * be started individually.
-         */
+    char prop[PROP_NAME_MAX];
+    snprintf(prop, PROP_NAME_MAX, "class_start:%s", args[1]);
+
+    /* Starting a class does not start services
+     * which are explicitly disabled.  They must
+     * be started individually.
+     */
     service_for_each_class(args[1], service_start_if_not_disabled);
+    action_for_each_trigger(prop, action_add_queue_tail);
     return 0;
 }
 
 int do_class_stop(int nargs, char **args)
 {
+    char prop[PROP_NAME_MAX];
+    snprintf(prop, PROP_NAME_MAX, "class_stop:%s", args[1]);
+
     service_for_each_class(args[1], service_stop);
+    action_for_each_trigger(prop, action_add_queue_tail);
     return 0;
 }
 
 int do_class_reset(int nargs, char **args)
 {
+    char prop[PROP_NAME_MAX];
+    snprintf(prop, PROP_NAME_MAX, "class_reset:%s", args[1]);
+
     service_for_each_class(args[1], service_reset);
+    action_for_each_trigger(prop, action_add_queue_tail);
     return 0;
 }
 
@@ -405,6 +423,34 @@ int do_mkdir(int nargs, char **args)
     return 0;
 }
 
+#define UBI_CTRL_DEV "/dev/ubi_ctrl"
+int do_ubiAttach(int nargs, char **args)
+{
+    struct ubi_attach_req req;
+    int fd;
+    int ret;
+
+    ERROR("do_ubiAttach %s %s\n",args[1],args[2]);
+
+    memset(&req, 0, sizeof(struct ubi_attach_req));
+    req.ubi_num =(typeof(req.ubi_num))atoi(args[1]);
+    if(-1 == req.ubi_num){
+        req.ubi_num = UBI_DEV_NUM_AUTO;
+    }
+    req.mtd_num = (typeof(req.mtd_num))mtd_name_to_number( args[2]);
+
+    fd = open(UBI_CTRL_DEV, O_RDONLY);
+    if(-1 == fd){
+        return -1;
+    }
+    ret = ioctl(fd, UBI_IOCATT, &req);
+    close(fd);
+    if(-1 == ret){
+        return -1;
+    }
+    return 0;
+}
+
 static struct {
     const char *name;
     unsigned flag;
@@ -545,7 +591,6 @@ static int wipe_data_via_recovery()
     while (1) { pause(); }  // never reached
 }
 
-
 /*
  * This function might request a reboot, in which case it will
  * not return.
@@ -610,8 +655,12 @@ int do_mount_all(int nargs, char **args)
          * not booting into ffbm then trigger that action.
          */
         property_get("ro.bootmode", boot_mode);
-        if (strncmp(boot_mode, "ffbm", 4))
+        if (strncmp(boot_mode, "ffbm", 4)) {
+#if BOOTCHART
+            queue_builtin_action(bootchart_init_action, "bootchart_init");
+#endif
             action_for_each_trigger("nonencrypted", action_add_queue_tail);
+        }
     } else if (ret == FS_MGR_MNTALL_DEV_NEEDS_RECOVERY) {
         /* Setup a wipe via recovery, and reboot into recovery */
         ERROR("fs_mgr_mount_all suggested recovery, so wiping data via recovery.\n");
@@ -1013,3 +1062,11 @@ int do_umount(int nargs, char **args) {
     return umount(args[1]);
 }
 
+int do_pipe(int nargs, char **args) {
+    mode_t mode = get_mode(args[1]);
+    if (mkfifo(args[2], mode) < 0) {
+	ERROR("peter do pipe error haha\n");
+        return -errno;
+    }
+    return 0;
+}
